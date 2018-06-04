@@ -31,7 +31,7 @@
 #define LOG_MSG_CLIPMAX "Overlap between %s and reference %s rejected due to clipmax=%4.2f constraint.\n"
 #define LOG_MSG_OVLCLIP "Overlap between %s and %s invalidated by the \
 %dnt clipping of %s at %d' end.\n"
-//-------- global variables 
+//-------- global variables
 bool debugMode=false;
 bool removeConsGaps=false;
 char* ref_prefix=NULL;
@@ -42,13 +42,6 @@ static FILE* outf;
 static GHash<GASeq> seqs(false);
 static GList<GSeqAlign> alns(true, true,false);
                         // sorted, free element, not unique
-
-// flag for reference status:
-static const unsigned char flag_IS_REF=0;
-
-//this is only for tree/transitive embedding:
-static const unsigned char flag_HAS_PARENT=1;
-
 float clipmax=0;
 //--------------------------------
 class RefAlign {
@@ -83,7 +76,7 @@ char* endSpToken(char* str) {
  if (str==NULL || *str==0) return NULL;
  char* p=str;
  for (;*p!=0;p++)
-  if (*p==' ' || *p=='\t' || *p=='\n') return p;   
+  if (*p==' ' || *p=='\t' || *p=='\n') return p;
  return p; // *p is '\0'
 }
 
@@ -173,7 +166,7 @@ int main(int argc, char * const argv[]) {
   int gaplen,gappos;
   bool skipRefContig=false;
   while ((line=linebuf->getLine())!=NULL) {
-   RefAlign* aln=NULL; 
+   RefAlign* aln=NULL;
    if (line[0]=='>') {
      //establish current reference
      char* ref_name=&line[1];
@@ -186,7 +179,7 @@ int main(int argc, char * const argv[]) {
             else {
               skipRefContig=true;
               goto NEXT_LINE_NOCHANGE;
-              }         
+              }
           }
      *p=0;
      if (seqs.Find(ref_name))
@@ -202,7 +195,7 @@ int main(int argc, char * const argv[]) {
      ref_len=ref_rend;
      refseq=new GASeq(ref_name, 0, ref_len,
                        ref_lend-1, ref_len-ref_rend, 0);
-     refseq->setFlag(flag_IS_REF);
+     refseq->setFlag(GA_flag_IS_REF);
      seqs.Add(ref_name,refseq);
      //may be followed by actual nucleotide sequence of this reference
      while (*p!=0 && *p!='\n') {
@@ -308,10 +301,10 @@ int main(int argc, char * const argv[]) {
      a->print(outf, 'v');
      }
    else {//write a real ACE file
-     //a->buildMSA();
+     //a->buildMSA(true);
      GStr ctgname;
      ctgname.format("AorContig%d",i+1);
-     a->writeACE(outf, ctgname.chars());
+     a->writeACE(outf, ctgname.chars(), true); //weigh down refs to favor consensus from reads
      a->freeMSA(); //free MSA and seq memory
      }
    } // for each PMSA cluster
@@ -352,7 +345,7 @@ RefAlign::RefAlign(char* line, int len, int lno) {
   p++;
   clip5=0;
   clip3=0;
-  if (!parseInt(p, seqlen)) parseErr(2);  
+  if (!parseInt(p, seqlen)) parseErr(2);
   if (!parseInt(p, offset)) parseErr(3);
   offset--;
   skipSp(p);
@@ -404,7 +397,7 @@ int RefAlign::nextSeqGap(int& pos) {
      if (r<=0) parseErr(6);
      }
  if (*gpos==',') gpos++;
- return r;    
+ return r;
 }
 
 int RefAlign::nextRefGap(int& pos) {
@@ -418,7 +411,7 @@ int RefAlign::nextRefGap(int& pos) {
      if (r<=0) parseErr(6);
      }
  if (*gpos_onref==',') gpos_onref++;
- return r;    
+ return r;
 }
 
 void printDebugAln(FILE* f, GSeqAlign* aln, int num, GCdbYank* cdbynk, GCdbYank* refcdb) {
@@ -432,11 +425,11 @@ void loadAlnSeqs(GSeqAlign* aln, GCdbYank* cdbynk, GCdbYank* refcdb) {
   for (int i=0;i<aln->Count();i++) {
     GASeq* s=aln->Get(i);
     if (s->len==0) {//not loaded yet
-      GCdbYank* yankdb=(s->hasFlag(flag_IS_REF) && refcdb!=NULL) ? refcdb : cdbynk;
+      GCdbYank* yankdb=(s->hasFlag(GA_flag_IS_REF) && refcdb!=NULL) ? refcdb : cdbynk;
       if (yankdb->getRecord(s->id, *s) <= 0)
-        GError("Error retrieving sequence %s from database %s!\n", 
+        GError("Error retrieving sequence %s from database %s!\n",
                                    s->id, yankdb->getDbName());
-      if (s->seqlen!=s->len) 
+      if (s->seqlen!=s->len)
         GError("Error: sequence %s length mismatch! Declared %d, retrieved %d\n",
                            s->id, s->seqlen, s->len);
       s->allupper();

@@ -9,6 +9,10 @@
 class GSeqAlign;
 class MSAColumns;
 
+extern const unsigned char GA_flag_IS_REF;
+extern const unsigned char GA_flag_HAS_PARENT;
+extern const unsigned char GA_flag_BAD_ALIGN;
+
 struct SeqDelOp {
   int pos;
   bool revcompl;
@@ -29,25 +33,25 @@ struct SeqDelOp {
 class GASeq : public FastaSeq {
 protected:
    int numgaps; //total number of accumulated gaps in this sequence
-   short *ofs; //array of gaps at each position; 
-              //a negative value (-1) means DELETION of the nucleotide 
+   short *ofs; //array of gaps at each position;
+              //a negative value (-1) means DELETION of the nucleotide
               //at that position!
 
   #ifdef ALIGN_COVERAGE_DATA
    int* cov; //coverage of every nucleotide of this seq
-             // it starts with 0 by itself 
+             // it starts with 0 by itself
              // it'll be decreased by -1 for mismatching ends!
   #endif
   GList<SeqDelOp>* delops; //delete operations
 public:
   unsigned char flags; //8 general purpose boolean flags (bits)
   // bad_align flag is the last bit -- i.e. bit 7
-  // all the others (0..6) are free for custom use  
+  // all the others (0..6) are free for custom use
   GSeqAlign* msa;
   int msaidx; //actual index at which this sequence is to be found in GASeqAlign;
   int seqlen; // exactly the size of ofs[]
   int offset; //offset in the layout
-  int ng_ofs; //non-gapped offset in the layout 
+  int ng_ofs; //non-gapped offset in the layout
               //(approx, for clipping constraints only)
   char revcompl; //0 = forward, 1=reverse
   int ext5; // layout-positional extension at 5' end
@@ -91,7 +95,7 @@ public:
   inline bool hasFlag(unsigned char bitno) { return ( (((unsigned char)1 << bitno) & flags) !=0 ); }
   int getNumGaps() { return numgaps;  }
   int gap(int pos) { return ofs[pos];  }
-  void removeBase(int pos); //remove the nucleotide at that position                           
+  void removeBase(int pos); //remove the nucleotide at that position
   int endOffset() { return offset+seqlen+numgaps; }
   int endNgOffset() { return ng_ofs+seqlen; }
   int removeClipGaps(); //remove gaps within clipped regions
@@ -107,7 +111,7 @@ public:
   void reverseGaps(); //don't update offset and flags
                       //useful after reading mgblast gap info
   void revComplement(int alignlen=0);
-  void toMSA(MSAColumns& msa);
+  void toMSA(MSAColumns& msa, int nucValue=1);
 };
 
 // -- nucleotide origin -- for every nucleotide in a MSA column
@@ -265,45 +269,46 @@ class GAlnColumn {
    delete nucs;
    if (clipnuc!=NULL) delete clipnuc;
    }
-  void addGap() { counts[ncGap].count++;
+  void addGap(int nucVal=1) { counts[ncGap].count+=nucVal;
                   layers++; //-- Not a "layer", actually
                   //numgaps++;
                   }
-  void addNuc(GASeq* seq, int pos, bool clipped=false) {
+  void addNuc(GASeq* seq, int pos, bool clipped=false, short nucVal=1) {
    //assumes the seq is already loaded and reverse complemented if necessary
    //position is precisely where it should be
    if (clipped) {
-      if (hasClip==false) {      
+      if (hasClip==false) {
             hasClip=true;
             clipnuc = new NucOri(seq,pos);
             }
        return;
        }
    char c=(char)toupper(seq->seq[pos]);
+
    switch (c) {
        case 'A':nucs->Add(new NucOri(seq,pos));
-                counts[ncA].count++;
+                counts[ncA].count+=nucVal;
                 layers++;
                 break;
        case 'C':nucs->Add(new NucOri(seq,pos));
-                counts[ncC].count++;
+                counts[ncC].count+=nucVal;
                 layers++;
                 break;
        case 'G':nucs->Add(new NucOri(seq,pos));
-                counts[ncG].count++;
+                counts[ncG].count+=nucVal;
                 layers++;
                 break;
        case 'T':nucs->Add(new NucOri(seq,pos));
-                counts[ncT].count++;
+                counts[ncT].count+=nucVal;
                 layers++;
                 break;
        case '-': //this shouldn't be the case!
-       case '*':counts[ncGap].count++;
+       case '*':counts[ncGap].count+=nucVal;
                 layers++;
                 //numgaps++;
                 break;
        default: nucs->Add(new NucOri(seq,pos));
-                counts[ncN].count++;
+                counts[ncN].count+=nucVal;
                 layers++;
                 //numN++;
        }//switch
@@ -344,7 +349,7 @@ class MSAColumns {
    int len() { return maxcol-mincol+1; }
    void updateMinMax(int minc, int maxc) {
     if (minc<mincol) mincol=minc;
-    if (maxc>maxcol) maxcol=maxc;    
+    if (maxc>maxcol) maxcol=maxc;
     }
 };
 
@@ -356,11 +361,11 @@ class GSeqAlign :public GList<GASeq> {
    int length;
    int minoffset;
    int consensus_cap;
-   void buildMSA();
+   void buildMSA(bool refWeighDown=false);
    void ErrZeroCov(int col);
  public:
     bool refinedMSA; //if refineMSA() was applied
-    MSAColumns* msacolumns; 
+    MSAColumns* msacolumns;
     unsigned int ordnum; //order number -- when it was created
               // the lower the better (earlier=higher score)
    int ng_len;     //ungapped length and minoffset (approximative,
@@ -377,7 +382,7 @@ class GSeqAlign :public GList<GASeq> {
      }
   bool operator<(GSeqAlign& d){
      return (this<&d);
-     }     
+     }
   //--
   GSeqAlign():GList<GASeq>(true,true,false), length(0), minoffset(0),
   		consensus_cap(0), refinedMSA(false), msacolumns(NULL), ordnum(0),
@@ -426,10 +431,10 @@ class GSeqAlign :public GList<GASeq> {
   void print() { print(stdout); }
   void removeColumn(int column);
   void freeMSA();
-  void refineMSA(bool redo_ends=false); 
+  void refineMSA(bool refWeighDown=false, bool redo_ends=false);
       // find consensus, refine clipping, remove gap-columns
-  void writeACE(FILE* f, const char* name);
-  void writeInfo(FILE* f, const char* name);
+  void writeACE(FILE* f, const char* name, bool refWeighDown=false);
+  void writeInfo(FILE* f, const char* name, bool refWeighDown=false);
 };
 
 int compareOrdnum(void* p1, void* p2);
