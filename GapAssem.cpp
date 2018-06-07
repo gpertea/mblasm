@@ -551,17 +551,14 @@ GSeqAlign::GSeqAlign(GASeq* s1, int l1, int r1,
 :GList<GASeq>(true,true,false) {
 #else
 GSeqAlign::GSeqAlign(GASeq* s1, GASeq* s2) :
-		GList<GASeq>(true, true, false) {
+		GList<GASeq>(true, true, false), length(0), minoffset(0),
+  		refinedMSA(false), msacolumns(NULL), ordnum(0),
+  		ng_len(0),ng_minofs(0), badseqs(0), consensus(512), consensus_bq(512) {
 #endif
-	msacolumns = NULL;
-	ordnum=0;
-	badseqs = 0;
 	s1->msa = this;
 	s2->msa = this;
-	refinedMSA = false;
-	consensus = NULL;
-	consensus_len = 0;
-	consensus_cap = 0;
+	//consensus_len = 0;
+	//consensus_cap = 0;
 	//the offset for at least one sequence is 0
 	this->Add(s1);
 	this->Add(s2);
@@ -571,7 +568,6 @@ GSeqAlign::GSeqAlign(GASeq* s1, GASeq* s2) :
 	length -= minoffset;
 	ng_len = GMAX(s1->endNgOffset(), s2->endNgOffset());
 	ng_len -= ng_minofs;
-
 	//-- according to the alignment, update the coverage for each sequence
 	//-- overlaps are granted +1 bonus
 #ifdef ALIGN_COVERAGE_DATA
@@ -982,7 +978,7 @@ void GSeqAlign::print(FILE* f, char c) {
 	}
 }
 
-char GAlnColumn::bestChar() {  //returns most frequent char -- could be a gap!
+char GAlnColumn::bestChar(int *qscore) {  //returns most frequent char -- could be a gap!
 	if (layers == 0)
 		return 0;
 	if (consensus != 0)
@@ -1084,7 +1080,8 @@ void GSeqAlign::refineMSA(bool refWeighDown, bool redo_ends) {
 	//==> remove columns and build consensus
 	int cols_removed = 0;
 	for (int col = msacolumns->mincol; col <= msacolumns->maxcol; col++) {
-		char c = msacolumns->columns[col].bestChar();
+		int qscore=0;
+		char c = msacolumns->columns[col].bestChar(qscore);
 		if (c == 0) { //should never be the case!
 			ErrZeroCov(col);
 			c = '*';
@@ -1100,7 +1097,7 @@ void GSeqAlign::refineMSA(bool refWeighDown, bool redo_ends) {
 				continue;//don't add this gap to the consensus
 			}
 		}
-		extendConsensus(c);
+		extendConsensus(c, baseq);
 	}
 	//-- refine clipping and remove gaps propagated in the clipping regions
 	for (int i = 0; i < Count(); i++) {
@@ -1108,7 +1105,7 @@ void GSeqAlign::refineMSA(bool refWeighDown, bool redo_ends) {
 		//if (seq->hasFlag(7)) continue; -- checking the badalign flag..
 		//refine clipping -- first pass:
 		if (MSAColumns::refineClipping)
-			seq->refineClipping(consensus, consensus_len,
+			seq->refineClipping(consensus, //consensus_len,
 			    seq->offset - minoffset - msacolumns->mincol);
 
 		//..remove any "gaps" in the non-aligned (trimmed) regions
@@ -1118,13 +1115,14 @@ void GSeqAlign::refineMSA(bool refWeighDown, bool redo_ends) {
 		//if any gaps were removed, take one more shot at
 		//refining the clipping -- we may get lucky and realign better..
 		if (grem != 0 && MSAColumns::refineClipping)
-			seq->refineClipping(consensus, consensus_len,
+			seq->refineClipping(consensus, //consensus_len,
 			    seq->offset - minoffset - msacolumns->mincol, true);
 	}
 	refinedMSA = true;
 }
 
 void GSeqAlign::extendConsensus(char c) {
+	/*
 	int newlen = consensus_len + 1;
 	if (newlen >= consensus_cap) {
 		consensus_cap += 128;
@@ -1137,6 +1135,8 @@ void GSeqAlign::extendConsensus(char c) {
 	consensus[consensus_len] = c;
 	consensus[newlen] = 0;
 	consensus_len++;
+	*/
+	consensus.Add(c);
 }
 
 void GSeqAlign::writeACE(FILE* f, const char* name, bool refWeighDown) {
@@ -1162,6 +1162,7 @@ void GSeqAlign::writeACE(FILE* f, const char* name, bool refWeighDown) {
 	//conseq.fprint(f,60);
 	FastaSeq::write(f, NULL, NULL, consensus, 60, consensus_len);
 	fprintf(f, "\nBQ \n\n");
+
 	for (int i = 0; i < Count(); i++) {
 		GASeq* seq = Get(i);
 		//if (seq->hasFlag(7)) continue; -- checking the badalign flag..

@@ -314,7 +314,7 @@ class GAlnColumn {
        }//switch
    }
 
-  char bestChar();
+  char bestChar(int* qscore=NULL);
   void remove(); //removes a nucleotide from all involved sequences
                  //adjust all affected offsets in the alignment
 };
@@ -360,7 +360,7 @@ class GSeqAlign :public GList<GASeq> {
    static unsigned int counter;
    int length;
    int minoffset;
-   int consensus_cap;
+   //int consensus_cap;
    void buildMSA(bool refWeighDown=false);
    void ErrZeroCov(int col);
  public:
@@ -371,8 +371,10 @@ class GSeqAlign :public GList<GASeq> {
    int ng_len;     //ungapped length and minoffset (approximative,
    int ng_minofs;  //  for clipping constraints only)
    int badseqs;
-   char* consensus; //consensus sequence (built by refineMSA())
-   int consensus_len;
+   //char* consensus; //consensus sequence (built by refineMSA())
+   GDynArray<char> consensus;
+   GDynArray<int16_t> consensus_bq;
+   //int consensus_len;
    friend class GASeq;
    bool operator==(GSeqAlign& d){
      return (this==&d);
@@ -385,14 +387,14 @@ class GSeqAlign :public GList<GASeq> {
      }
   //--
   GSeqAlign():GList<GASeq>(true,true,false), length(0), minoffset(0),
-  		consensus_cap(0), refinedMSA(false), msacolumns(NULL), ordnum(0),
-  		ng_len(0),ng_minofs(0), badseqs(0), consensus(NULL), consensus_len(0) {
+  		refinedMSA(false), msacolumns(NULL), ordnum(0),
+  		ng_len(0),ng_minofs(0), badseqs(0), consensus(512), consensus_bq(512) {
     //default is: sorted by GASeq offset, free nodes, non-unique
     }
   GSeqAlign(bool sorted, bool free_elements=true, bool beUnique=false)
      :GList<GASeq>(sorted,free_elements,beUnique), length(0), minoffset(0),
-  		consensus_cap(0), refinedMSA(false), msacolumns(NULL), ordnum(0),
-  		ng_len(0),ng_minofs(0), badseqs(0), consensus(NULL), consensus_len(0) {
+  		refinedMSA(false), msacolumns(NULL), ordnum(0),
+  		ng_len(0),ng_minofs(0), badseqs(0), consensus(512), consensus_bq(512) {
     }
   void incOrd() { ordnum = ++counter; }
   //first time creation from a pairwise alignment:
@@ -411,7 +413,7 @@ class GSeqAlign :public GList<GASeq> {
   void addSeq(GASeq* s, int soffs, int ngofs);
   void injectGap(GASeq* seq, int pos, int xgap);
   void removeBase(GASeq* seq, int pos);
-  void extendConsensus(char c);
+  void extendConsensus(char c, int16_t bq=0);
   //try to propagate the planned trimming of a read
   //to the whole MSA containing it
   // returns false if too much is trimmed of any component read
