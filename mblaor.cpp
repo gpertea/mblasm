@@ -59,7 +59,7 @@ class RefAlign {
   int clip3;
   char reverse; //is this reversed?
   void parseErr(int fldno);
-  RefAlign(char* line, int len, int lno);
+  RefAlign(char* line, int lno);
   ~RefAlign();
   int nextRefGap(int& pos);
   int nextSeqGap(int& pos);
@@ -216,7 +216,7 @@ int main(int argc, char * const argv[]) {
      else {
    //else:
    //-------------------------------------------
-   aln=new RefAlign(line, linebuf->tlength(), rlineno+1);
+   aln=new RefAlign(line, rlineno+1);
    if (strcmp(aln->seqname, refseq->id)==0)
      goto NEXT_LINE_NOCHANGE; //skip redundant inclusion of reference as its own child
    if (seqs.Find(aln->seqname))
@@ -330,7 +330,7 @@ void RefAlign::parseErr(int fldno) {
  exit(3);
 }
 
-RefAlign::RefAlign(char* line, int len, int lno) {
+RefAlign::RefAlign(char* line, int lno) {
   lineno=lno;
   linecpy=Gstrdup(line);
   seqname=line;
@@ -433,7 +433,7 @@ void loadAlnSeqs(GSeqAlign* aln, GCdbYank* cdbynk, GCdbYank* refcdb) {
         GError("Error: sequence %s length mismatch! Declared %d, retrieved %d\n",
                            s->id, s->seqlen, s->len);
       s->allupper();
-      s->loadProcessing();
+      s->finalize();
       }
     }
  }
