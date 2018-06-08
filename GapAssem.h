@@ -12,6 +12,7 @@ class MSAColumns;
 extern const unsigned char GA_flag_IS_REF;
 extern const unsigned char GA_flag_HAS_PARENT;
 extern const unsigned char GA_flag_BAD_ALIGN;
+extern const unsigned char GA_flag_PREPPED;
 
 struct SeqDelOp {
   int pos;
@@ -42,7 +43,9 @@ protected:
              // it starts with 0 by itself
              // it'll be decreased by -1 for mismatching ends!
   #endif
-  GList<SeqDelOp>* delops; //delete operations
+  GList<SeqDelOp> delops; //delete operations
+  void prepSeq(); //reverse complement if needed, and apply deletions (delops)
+  //should only be called once when the MSA is complete (by GSeqAlign::finalize())
 public:
   unsigned char flags; //8 general purpose boolean flags (bits)
   // bad_align flag is the last bit -- i.e. bit 7
@@ -66,6 +69,12 @@ public:
        seq[i]=toupper(seq[i]);
        }
      }
+  void lowercase() {
+     for (int i=0;i<len;i++) {
+       seq[i]=tolower(seq[i]);
+       }
+     }
+
   void reverseComplement() {
     if (len==0) return;
     //ntCompTableInit();
@@ -83,7 +92,21 @@ public:
      }
   friend class GSeqAlign;
   //-------------------------------
-  GASeq(const char* sname, const char* sdesrc=NULL, char* sseq=NULL);
+  GASeq(FastaSeq& faseq, bool takeover=false);
+  GASeq(GASeq& aseq); //copy constructor
+  GASeq(const char* sname=NULL,int slen=0):FastaSeq(sname),
+		  numgaps(0), ofs(NULL), delops(false, true, false),flags(0),msa(NULL),
+		  msaidx(-1), seqlen(slen), offset(0),
+		  ng_ofs(0),revcompl(0), ext5(0), ext3(0),
+		  clp5(0), clp3(0) {
+   if (seqlen>0) {
+	GCALLOC(ofs, seqlen * sizeof(short));
+	#ifdef ALIGN_COVERAGE_DATA
+		GCALLOC(cov,seqlen*sizeof(int));
+	#endif
+   }
+  };
+  GASeq(const char* sname, const char* sdescr=NULL, const char* sseq=NULL, int slen=0, int soffset=0);
   GASeq(const char* sname, int soffset, int slen, int sclipL=0, int sclipR=0, char rev=0);
   ~GASeq();
   void refineClipping(char* cons, int cons_len, int cpos, bool skipDels=false);
@@ -103,8 +126,10 @@ public:
   void printGappedSeq(FILE* f, int baseoffs=0);
   void printGappedSeq(int baseoffs=0) { printGappedSeq(stdout, baseoffs); }
   void printGappedFasta(FILE* f);
-  void loadProcessing(); //to be called immediately after loading the sequence
+  void printMFasta(FILE* f, int llen=60); //offset padded
+  //void loadProcessing(); //to be called immediately after loading the sequence
                    // it will revCompl if needed and apply delops
+  void finalize(); //delete inserts and reverse complement sequence if needed
   #ifdef ALIGN_COVERAGE_DATA
   void addCoverage(GASeq* s);
   #endif
@@ -248,27 +273,23 @@ class GAlnColumn {
   GList<NucOri>* nucs;
   friend int qsortnuc(const void* p1, const void* p2);
   //int total() { return numgaps+numN+numA()+numC()+numG()+numT(); }
-  GAlnColumn() {        //sorted?, free?, unique?
-   clipnuc=NULL;
+  GAlnColumn():countsSorted(false),hasClip(false), consensus(0),
+		  layers(0), clipnuc(NULL), nucs(NULL) {        //sorted?, free?, unique?
    nucs=new GList<NucOri>(false,true,false);
    /*lstC=new GList<NucOri>(false,true,false);
    lstG=new GList<NucOri>(false,true,false);
    lstT=new GList<NucOri>(false,true,false);*/
-   countsSorted=false;
    counts[ncA].set('A');
    counts[ncC].set('C');
    counts[ncG].set('G');
    counts[ncT].set('T');
    counts[ncN].set('N');
    counts[ncGap].set('-');
-   hasClip=false;
-   layers=0;
-   consensus=0;
-   }
+  }
   ~GAlnColumn() {
    delete nucs;
    if (clipnuc!=NULL) delete clipnuc;
-   }
+  }
   void addGap(int nucVal=1) { counts[ncGap].count+=nucVal;
                   layers++; //-- Not a "layer", actually
                   //numgaps++;
@@ -284,7 +305,6 @@ class GAlnColumn {
        return;
        }
    char c=(char)toupper(seq->seq[pos]);
-
    switch (c) {
        case 'A':nucs->Add(new NucOri(seq,pos));
                 counts[ncA].count+=nucVal;
@@ -357,7 +377,7 @@ class MSAColumns {
 //-----------------------------------------------
 // a sequence alignment: could be pairwise or MSA
 class GSeqAlign :public GList<GASeq> {
-   static unsigned int counter;
+   //static unsigned int counter;
    int length;
    int minoffset;
    //int consensus_cap;
@@ -386,7 +406,8 @@ class GSeqAlign :public GList<GASeq> {
      return (this<&d);
      }
   //--
-  GSeqAlign():GList<GASeq>(true,true,false), length(0), minoffset(0),
+  //GSeqAlign():GList<GASeq>(true,true,false), length(0), minoffset(0),
+  GSeqAlign():GList<GASeq>(false,true,false), length(0), minoffset(0),
   		refinedMSA(false), msacolumns(NULL), ordnum(0),
   		ng_len(0),ng_minofs(0), badseqs(0), consensus(512), consensus_bq(512) {
     //default is: sorted by GASeq offset, free nodes, non-unique
@@ -396,7 +417,8 @@ class GSeqAlign :public GList<GASeq> {
   		refinedMSA(false), msacolumns(NULL), ordnum(0),
   		ng_len(0),ng_minofs(0), badseqs(0), consensus(512), consensus_bq(512) {
     }
-  void incOrd() { ordnum = ++counter; }
+  //void incOrd() { ordnum = ++counter; }
+  void incOrd() { ordnum++; }
   //first time creation from a pairwise alignment:
   #ifdef ALIGN_COVERAGE_DATA
   GSeqAlign(GASeq* s1, int l1, int r1, GASeq* s2, int l2, int r2);
@@ -413,7 +435,7 @@ class GSeqAlign :public GList<GASeq> {
   void addSeq(GASeq* s, int soffs, int ngofs);
   void injectGap(GASeq* seq, int pos, int xgap);
   void removeBase(GASeq* seq, int pos);
-  void extendConsensus(char c, int16_t bq=0);
+  void extendConsensus(char c, int16_t bq=SHRT_MIN);
   //try to propagate the planned trimming of a read
   //to the whole MSA containing it
   // returns false if too much is trimmed of any component read
@@ -429,13 +451,15 @@ class GSeqAlign :public GList<GASeq> {
   // *if not OK <=> the layout doesn't accept the merge
   //  due to clipmax constraint, then nothing happens
   bool addAlign(GASeq* seq, GSeqAlign* omsa, GASeq* oseq);
-  void print(FILE* f, char c=0);
+  void finalize(); //delete inserts and reverse complement sequences as needed
+  void print(FILE* f, char c=0); //debug printing one-line alignments
   void print() { print(stdout); }
   void removeColumn(int column);
   void freeMSA();
   void refineMSA(bool refWeighDown=false, bool redo_ends=false);
       // find consensus, refine clipping, remove gap-columns
   void writeACE(FILE* f, const char* name, bool refWeighDown=false);
+  void writeMSA(FILE* f, int linelen=60); //write as multi-FASTA (MAF?) file
   void writeInfo(FILE* f, const char* name, bool refWeighDown=false);
 };
 

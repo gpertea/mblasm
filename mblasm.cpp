@@ -691,7 +691,7 @@ void loadAlnSeqs(GSeqAlign* aln, GCdbYank* cdbynk) {
               GError("Error retrieving sequence %s from database %s!\n", 
                                    s->id, cdbynk->getDbName());
       s->allupper();
-      s->loadProcessing();
+      s->finalize();
       }
     }
  }
