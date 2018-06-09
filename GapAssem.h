@@ -109,7 +109,7 @@ public:
   GASeq(const char* sname, const char* sdescr=NULL, const char* sseq=NULL, int slen=0, int soffset=0);
   GASeq(const char* sname, int soffset, int slen, int sclipL=0, int sclipR=0, char rev=0);
   ~GASeq();
-  void refineClipping(char* cons, int cons_len, int cpos, bool skipDels=false);
+  void refineClipping(GDynArray<char>& cons, int cpos, bool skipDels=false);
   void setGap(int pos, short gaplen=1); // set the gap in this pos
   void addGap(int pos, short gapadd); //extend the gap in this pos
   //bitno is 0 based here, for simplicity:
@@ -257,10 +257,10 @@ class AlnClipOps :public GList<SeqClipOp> {
 class GAlnColumn {
  protected:
    struct NucCount {
-     char c; // A, C, G, T, N or -
-             // precisely in this order!
+     char nt; // A, C, G, T, N or -
+             // precisely in this order (except after qsort)
      int count;
-     void set(char l, int num=0) { c=l;count=num; }
+     void set(char l, int num=0) { nt=l;count=num; }
      };
   enum { ncA=0, ncC, ncG, ncT, ncN, ncGap };
   NucCount counts[6];
@@ -334,7 +334,7 @@ class GAlnColumn {
        }//switch
    }
 
-  char bestChar(int* qscore=NULL);
+  char bestChar(int16_t *qscore=NULL);
   void remove(); //removes a nucleotide from all involved sequences
                  //adjust all affected offsets in the alignment
 };
@@ -427,7 +427,6 @@ class GSeqAlign :public GList<GASeq> {
   #endif
   ~GSeqAlign() {
     if (msacolumns!=NULL) delete msacolumns;
-    if (consensus!=NULL) GFREE(consensus);
     }
   int len() { return length; }
 
