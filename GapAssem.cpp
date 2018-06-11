@@ -1265,7 +1265,20 @@ void GSeqAlign::writeACE(FILE* f, const char* name, bool refWeighDown) {
 	//   conseq.len, Count()-badseqs, consDir);
 	//conseq.fprint(f,60);
 	FastaSeq::write(f, NULL, NULL, consensus(), 60, consensus.Count());
-	fprintf(f, "\nBQ \n\n"); //TODO: print consensus_bq array values here!
+	//fprintf(f, "\nBQ \n\n"); //TODO: print consensus_bq array values here!
+	fprintf(f, "\nBQ\n");
+	int bl=0;
+	for (uint i=0;i<consensus_bq.Count();++i) {
+		if (bl) fprintf(f, " %d", consensus_bq[i]);
+		   else fprintf(f,  "%d", consensus_bq[i]);
+		++bl;
+		if (bl==60) {
+			fprintf(f,"\n");
+			bl=0;
+		}
+	}
+	if (bl) fprintf(f, "\n\n");
+	   else fprintf(f, "\n");
 	for (int i = 0; i < Count(); i++) {
 		GASeq* seq = Get(i);
 		//if (seq->hasFlag(7)) continue; -- checking the badalign flag..
