@@ -66,7 +66,7 @@ endif
 %.o : %.cpp
 	${CC} ${CFLAGS} -c $< -o $@
 
-OBJS := ${GDIR}/GBase.o ${GDIR}/GStr.o ${GDIR}/GArgs.o ${GDIR}/gdna.o ./GapAssem.o
+OBJS := ${GDIR}/GBase.o ${GDIR}/GStr.o ${GDIR}/GArgs.o ${GDIR}/gdna.o ${GDIR}/GapAssem.o
 
 #ifndef NOTHREADS
 # OBJS += ${GDIR}/GThreads.o 
@@ -99,9 +99,9 @@ tclust:  ./tclust.o ${GDIR}/GBase.o ${GDIR}/GStr.o ${GDIR}/GArgs.o
 sclust:  ./sclust.o ${GDIR}/GBase.o ${GDIR}/GStr.o ${GDIR}/GArgs.o
 	${LINKER} $(LDFLAGS) -o $@ ${filter-out %.a %.so, $^}
 
-./GapAssem.o: GapAssem.h
+${GDIR}/GapAssem.o: ${GDIR}/GapAssem.h
 
-mblaor :  ./mblaor.o ./GapAssem.o ${GDIR}/GCdbYank.o ${GDIR}/gcdb.o ${OBJS}
+mblaor :  ./mblaor.o ${GDIR}/GapAssem.o ${GDIR}/GCdbYank.o ${GDIR}/gcdb.o ${OBJS}
 	${LINKER} -o $@ ${filter-out %.a %.so, $^} $(LDFLAGS) ${LIBS}
 
 # target for removing all object files
